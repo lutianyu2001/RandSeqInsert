@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# Tianyu (Sky) Lu (tianyu@lu.fm)
 
 from typing import Dict, List, Tuple, Set, Optional, Any, NamedTuple
 from Bio.SeqRecord import SeqRecord
@@ -22,10 +23,29 @@ class InsertionEvent(NamedTuple):
         return f"Event#{self.event_id}: Donor({self.donor_uid}) → Target({self.target_uid}) → [L({self.left_uid}), R({self.right_uid})]{tsd_str}"
 
 
-class SequenceEventJournal:
+class NestingEventJournal:
     """
-    Event sourcing architecture for sequence insertion events.
-    Records all sequence insertion events and supports sequence reconstruction from event history.
+    Event sourcing architecture for nested sequence insertion events.
+    
+    Important Note: This journal does NOT record all insertion events. It only records 
+    insertion events where a donor sequence is inserted INTO another donor sequence 
+    (nested insertions). Regular insertions of donor sequences into non-donor acceptor 
+    sequences are NOT recorded in this journal.
+    i.e.
+    Records only Donor → Donor insertions (nested insertions). 
+    Does NOT record Donor → Acceptor insertions (simple insertions).
+    
+    Specifically:
+    - Records: Donor → Donor insertions (creates nested structure requiring reconstruction)
+    - Does NOT record: Donor → Acceptor insertions (simple insertions, no nesting involved)
+    
+    This selective recording is by design, as the journal's primary purpose is to:
+    1. Track nested insertion relationships between donor sequences
+    2. Support reconstruction of donor sequences that have been split by other insertions
+    3. Enable proper handling of complex transposon insertion scenarios
+    4. Maintain event history for sequences that require multi-level reconstruction
+    
+    The journal supports sequence reconstruction from event history for nested cases.
     """
     def __init__(self, tree_ref):
         """
@@ -42,7 +62,7 @@ class SequenceEventJournal:
     def __str__(self) -> str:
         """String representation for debugging"""
         lines = ["=" * 32,
-                 "SequenceEventJournal Information",
+                 "NestingEventJournal Information",
                  "=" * 32,
                  f"\nEvent count: {len(self.events)}"]
 
@@ -61,17 +81,20 @@ class SequenceEventJournal:
                          left_uid: int, right_uid: int, 
                          tsd_info: Dict[str, Any] = None) -> InsertionEvent:
         """
-        Record an insertion event.
+        Record an insertion event where a donor sequence is inserted into another donor sequence.
+        
+        Note: This method is only called when the target node is also a donor sequence.
+        Regular insertions into non-donor acceptor sequences are not recorded in this journal.
 
         Args:
             donor_uid: Inserted donor node UID
-            target_uid: Target node UID being inserted into
-            left_uid: Left fragment UID after splitting
-            right_uid: Right fragment UID after splitting
+            target_uid: Target node UID being inserted into (must be a donor)
+            left_uid: Left fragment UID after splitting the target
+            right_uid: Right fragment UID after splitting the target
             tsd_info: TSD information (optional)
 
         Returns:
-            InsertionEvent: The recorded event
+            InsertionEvent: The recorded event representing the nested insertion
         """
         # Create new event
         event = InsertionEvent(
@@ -383,12 +406,12 @@ class SequenceEventJournal:
 
     def get_reconstructed_donor_uids(self, active_nodes: List = None) -> Set[int]:
         """
-        Get all donor UIDs that need reconstruction from active nodes.
+        Get all donor UIDs that need reconstruction.
         These are donors that have been split by other donors.
 
         Args:
             active_nodes: Optional list of active nodes from in-order traversal.
-                          If provided, only considers donors from these nodes.
+                          Not used in this corrected implementation.
 
         Returns:
             Set[int]: Set of UIDs of donors to reconstruct
@@ -398,20 +421,11 @@ class SequenceEventJournal:
         for event in self.events:
             # If a node is a target and it's a donor (not the root node)
             if event.target_uid != self.tree_ref.root.uid:
-                # Check if this target is a donor
-                is_donor = False
-                
-                # If active nodes are provided, check if the target is in active nodes and is a donor
-                if active_nodes is not None:
-                    for node in active_nodes:
-                        if node.uid == event.target_uid and node.is_donor:
-                            is_donor = True
-                            break
-                # Otherwise use general is_donor check
-                else:
-                    is_donor = self.is_donor(event.target_uid)
-                
-                if is_donor:
+                # Check if this target is a donor using the general is_donor check
+                # Note: We don't check active_nodes here because targets that need
+                # reconstruction are precisely the nodes that are NOT in active nodes
+                # anymore (they were replaced during insertion)
+                if self.is_donor(event.target_uid):
                     reconstructed_uids.add(event.target_uid)
         
         return reconstructed_uids
@@ -586,10 +600,10 @@ class SequenceEventJournal:
             str: Graphviz DOT format string
         """
         if not self.tree_ref.root:
-            return "digraph SequenceEventJournal { }"
+            return "digraph NestingEventJournal { }"
         
         # Initialize DOT header
-        dot_str = ["digraph SequenceEventJournal {",
+        dot_str = ["digraph NestingEventJournal {",
                   "  bgcolor=\"#FFFFFF\";",
                   "  node [fontcolor=\"#000000\", shape=box, style=filled];",
                   "  edge [fontcolor=\"#000000\", penwidth=2.0];",

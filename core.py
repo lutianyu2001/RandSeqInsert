@@ -6,6 +6,7 @@ from typing import Tuple, List, Dict, Optional, Set, Union, Iterable, Any
 from Bio.SeqRecord import SeqRecord
 
 from utils import create_sequence_record, generate_TSD
+from nestingeventjournal import NestingEventJournal
 
 
 class SequenceNode:
@@ -196,8 +197,7 @@ class SequenceTree:
         self.root = self._create_node(initial_seq, False)
 
         # Create event journal
-        from sequenceeventjournal import SequenceEventJournal
-        self.event_journal = SequenceEventJournal(self)
+        self.event_journal = NestingEventJournal(self)
 
     def __str__(self) -> str:
         """
@@ -378,6 +378,10 @@ class SequenceTree:
                             'tsd_3': tsd_3
                         }
                     
+                    # Create a preserved copy of the original target node for journal reference
+                    original_target = SequenceNode(current.data, is_current_donor, current_donor_id, old_node_uid)
+                    self.node_dict[old_node_uid] = original_target
+                    
                     # Record insertion event
                     self.event_journal.record_insertion(
                         donor_uid=donor_node_uid,
@@ -387,10 +391,7 @@ class SequenceTree:
                         tsd_info=tsd_info
                     )
 
-                # Release old node UID (Do not reuse it)
-                # self._release_uid(old_node_uid)
-
-                # Update node information
+                # Update current node to become the donor node
                 current.data = donor_seq
                 current.length = len(donor_seq)
                 current.is_donor = True
@@ -545,6 +546,10 @@ class SequenceTree:
                         'tsd_3': tsd_3
                     }
                 
+                # Create a preserved copy of the original target node for journal reference
+                original_target = SequenceNode(node.data, is_current_donor, current_donor_id, old_node_uid)
+                self.node_dict[old_node_uid] = original_target
+                
                 # Record insertion event
                 self.event_journal.record_insertion(
                     donor_uid=donor_node_uid,
@@ -553,9 +558,6 @@ class SequenceTree:
                     right_uid=right_node_uid,
                     tsd_info=tsd_info
                 )
-
-            # Release old node UID (Do not reuse it)
-            # self._release_uid(old_node_uid)
 
             # Update node information
             node.data = donor_seq

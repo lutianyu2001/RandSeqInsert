@@ -556,9 +556,10 @@ class SeqGenerator:
         print(f"Saving {len(sequences)} processed sequences")
         output_dict = {f"sequences{suffix}.fa": sequences}
 
-        if self.flag_track and donors:
-            print(f"Saving {len(donors)} donor sequence records")
-            output_dict[f"used_donors{suffix}.fa"] = donors
+        if self.flag_track:
+            if donors:
+                print(f"Saving {len(donors)} donor sequence records")
+                output_dict[f"used_donors{suffix}.fa"] = donors
 
             if reconstructed_donors:
                 # Group by reconstruction type
