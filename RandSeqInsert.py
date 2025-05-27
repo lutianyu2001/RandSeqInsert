@@ -385,18 +385,18 @@ class SeqGenerator:
 
         # Generate visualization if requested
         if self.flag_visual:
-            # Create visualization directories once if they don't exist
-            tree_visual_dir_path = os.path.join(self.output_dir_path, VISUAL_DIR_NAME)
-            os.makedirs(tree_visual_dir_path, exist_ok=True)
-            
             # Generate tree visualization
             graphviz_str = seq_tree.to_graphviz_dot()
+            tree_visual_dir_path = os.path.join(self.output_dir_path, VISUAL_DIR_NAME)
+            os.makedirs(tree_visual_dir_path, exist_ok=True)
             with open(os.path.join(tree_visual_dir_path, f"{seq_record.id}_tree_visual.dot"), "w") as f:
                 f.write(graphviz_str)
 
-            # Generate nesting graph visualization - use the same directory for both visualizations
+            # Generate nesting graph visualization
+            graph_visual_dir_path = os.path.join(self.output_dir_path, VISUAL_DIR_NAME)
+            os.makedirs(graph_visual_dir_path, exist_ok=True)
             nesting_graphviz_str = seq_tree.event_journal.to_graphviz_dot()
-            with open(os.path.join(tree_visual_dir_path, f"{seq_record.id}_event_visual.dot"), "w") as f:
+            with open(os.path.join(graph_visual_dir_path, f"{seq_record.id}_event_visual.dot"), "w") as f:
                 f.write(nesting_graphviz_str)
 
             print(f"Generated tree and graph visualizations for {seq_record.id}")
@@ -553,9 +553,6 @@ class SeqGenerator:
         # Add batch suffix to filenames if multiple batches
         suffix = f"_batch{batch_num}" if self.batch > 1 else ""
 
-        # Create the output directory once if it doesn't exist
-        os.makedirs(output_dir, exist_ok=True)
-        
         print(f"Saving {len(sequences)} processed sequences")
         output_dict = {f"sequences{suffix}.fa": sequences}
 
@@ -567,11 +564,6 @@ class SeqGenerator:
                 # Group by reconstruction type
                 full_recs = [d for d in reconstructed_donors if "reconstruction_type" in d.annotations and d.annotations["reconstruction_type"] == "full"]
                 clean_recs = [d for d in reconstructed_donors if "reconstruction_type" in d.annotations and d.annotations["reconstruction_type"] == "clean"]
-
-                # Debug print
-                print(f"DEBUG: Found {len(reconstructed_donors)} reconstructed_donors records")
-                if len(reconstructed_donors) > 0:
-                    print(f"DEBUG: Sample record ID: {reconstructed_donors[0].id}, annotations: {reconstructed_donors[0].annotations}")
 
                 if full_recs:
                     print(f"Saving {len(full_recs)} full reconstructed donor records")

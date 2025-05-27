@@ -667,8 +667,7 @@ class SequenceTree:
                     continue
                     
                 # Create donor ID - now reflects sequence without TSD
-                end_pos_1based = start_pos_1based + donor_length - 1
-                donor_id = f"{seq_id}_{start_pos_1based}_{end_pos_1based}-+-{donor_length}"
+                donor_id = f"{seq_id}_{start_pos_1based}_{start_pos_1based + donor_length - 1}-+-{donor_length}"
                 if node.donor_id:
                     donor_id += f"-{node.donor_id}"
                 

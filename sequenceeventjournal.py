@@ -395,19 +395,23 @@ class SequenceEventJournal:
         """
         reconstructed_uids = set()
         
-        # Build a mapping of active node UIDs for faster lookup
-        active_node_uids = set()
-        if active_nodes is not None:
-            active_node_uids = {node.uid for node in active_nodes}
-        
-        # Look for donor nodes that are targets of any insertion event
         for event in self.events:
-            # Check if the target node is a donor
-            target_node = self.tree_ref.node_dict.get(event.target_uid)
-            if target_node and target_node.is_donor:
-                # If using active_nodes, verify the target is active
-                if active_nodes is None or event.target_uid in active_node_uids:
-                    # This is a donor that has been a target of an insertion - needs reconstruction
+            # If a node is a target and it's a donor (not the root node)
+            if event.target_uid != self.tree_ref.root.uid:
+                # Check if this target is a donor
+                is_donor = False
+                
+                # If active nodes are provided, check if the target is in active nodes and is a donor
+                if active_nodes is not None:
+                    for node in active_nodes:
+                        if node.uid == event.target_uid and node.is_donor:
+                            is_donor = True
+                            break
+                # Otherwise use general is_donor check
+                else:
+                    is_donor = self.is_donor(event.target_uid)
+                
+                if is_donor:
                     reconstructed_uids.add(event.target_uid)
         
         return reconstructed_uids
@@ -430,20 +434,7 @@ class SequenceEventJournal:
         # Get all donors that need reconstruction
         reconstructed_uids = self.get_reconstructed_donor_uids(active_nodes)
         
-        # Calculate absolute positions for all nodes
-        abs_position_map = self._calculate_absolute_positions()
-        
         for uid in reconstructed_uids:
-            # Skip if the node is not in active_nodes when provided
-            if active_nodes is not None:
-                found = False
-                for node in active_nodes:
-                    if node.uid == uid:
-                        found = True
-                        break
-                if not found:
-                    continue
-            
             # Reconstruct sequence
             reconstruct_result = self.reconstruct(uid, seq_id)
             if not reconstruct_result:
@@ -457,20 +448,13 @@ class SequenceEventJournal:
             # Find TSD information for this donor
             tsd_5 = ""
             tsd_3 = ""
-            # Find absolute position for this donor for naming
-            start_pos = abs_position_map.get(uid, 0)
-            start_pos_1based = start_pos + 1
-
             for event in self.events:
                 if event.donor_uid == uid and event.tsd_info:
                     tsd_info = event.tsd_info
                     tsd_5 = tsd_info.get('tsd_5', '')
                     tsd_3 = tsd_info.get('tsd_3', '')
-                    # Adjust start_pos_1based if TSD is present, as it's part of the original node's coordinates
-                    if tsd_5: # 5' TSD is part of the donor, so its removal shifts the start
-                        start_pos_1based += len(tsd_5)
                     break
-
+            
             # Remove TSD from full reconstruction
             full_seq = reconstruct_result['full']
             if tsd_5 and full_seq.startswith(tsd_5):
@@ -478,15 +462,12 @@ class SequenceEventJournal:
             if tsd_3 and full_seq.endswith(tsd_3):
                 full_seq = full_seq[:-len(tsd_3)]
             
-            current_length = len(full_seq)
-            end_pos_1based = start_pos_1based + current_length - 1
-
             # Create full reconstruction record with TSD removed
-            full_id = f"{seq_id}_{start_pos_1based}_{end_pos_1based}-+-{current_length}"
+            full_id = f"{seq_id}_reconstructed_{uid}"
             # Add donor_id to the record ID if it exists
             if node.donor_id:
                 full_id = f"{full_id}-{node.donor_id}"
-
+                
             full_rec = create_sequence_record(full_seq, full_id)
             full_rec.annotations["reconstruction_type"] = "full"
             full_rec.annotations["original_uid"] = uid
@@ -501,15 +482,12 @@ class SequenceEventJournal:
             if tsd_3 and clean_seq.endswith(tsd_3):
                 clean_seq = clean_seq[:-len(tsd_3)]
             
-            clean_length = len(clean_seq)
-            clean_end_pos_1based = start_pos_1based + clean_length - 1
-
             # Create clean reconstruction record with TSD removed
-            clean_id = f"{seq_id}_{start_pos_1based}_{clean_end_pos_1based}-+-{clean_length}"
+            clean_id = f"{seq_id}_clean_reconstructed_{uid}"
             # Add donor_id to the record ID if it exists
             if node.donor_id:
                 clean_id = f"{clean_id}-{node.donor_id}"
-
+                
             clean_rec = create_sequence_record(clean_seq, clean_id)
             clean_rec.annotations["reconstruction_type"] = "clean"
             clean_rec.annotations["original_uid"] = uid
