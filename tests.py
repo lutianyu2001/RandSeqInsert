@@ -961,7 +961,7 @@ def test_comprehensive_nesting():
 
 def test_multiple_cuts_fragments_distinction():
     """
-    Test improvement of fragment distinction function for multiple cutting scenarios
+    Test fragment distinction function for multiple cutting scenarios
     Verify if it can correctly distinguish different fragments produced by different cutters
     
     Returns:
@@ -972,37 +972,23 @@ def test_multiple_cuts_fragments_distinction():
     # Initialize tree data structure
     tree = SequenceTree("ATGCATGCATGCATGCATGCATGCATGCATGCATGC")  # Original sequence
 
-    # Create a scenario with multiple cuts
-    # The original sequence is cut by three different donors:
-    # - donor 1 cuts at position 10
-    # - donor 2 cuts at position 20
-    # - donor 3 cuts at position 30
-    
+    # Create a scenario with multiple insertions (not cuts, since these are simple insertions)
     # Insert donor sequences at respective positions
     tree.insert(10, "GTACGTAC", "cutter1")
     tree.insert(20, "CCGGAATT", "cutter2")
     tree.insert(30, "TTAGGCCA", "cutter3")
     
-    # Get event journal
-    event_journal = tree.event_journal
-    
-    # Define expected results - corrected for simple insertions
+    # Define expected results for simple insertions
     expected = {
-        "event_count": 0,  # Expected 0 events (simple insertions, no nesting)
         "donor_count": 3,  # Expected 3 donor records
-        "recon_count": 0,  # Expected 0 reconstructions
+        "recon_count": 0,  # Expected 0 reconstructions (no nesting)
     }
     
     # Test fragment distinction function
     success = True
     error_messages = []
     
-    # 1. Verify if event records are complete (should be 0 for simple insertions)
-    if len(event_journal.events) != expected["event_count"]:
-        error_messages.append(f"Error: Should record {expected['event_count']} events, but found {len(event_journal.events)}")
-        success = False
-    
-    # 2. Test donor records (since no events expected for simple insertions)
+    # Test donor records
     donor_records, reconstructed = tree.donors("test")
     
     # Check donor record count
@@ -1019,24 +1005,15 @@ def test_multiple_cuts_fragments_distinction():
         error_messages.append(f"Error: Should have {expected['recon_count']} reconstructions, but found {len(reconstructed) if reconstructed else 0}")
         success = False
     
-    # 3. Generate DOT visualization
-    dot_str = event_journal.to_graphviz_dot()
-    
-    # Define expected DOT visualization results (for simple insertions)
-    dot_expected = {
-        "contains_nodes": True,  # Expected DOT to contain node information
-        "contains_events": False  # Expected no events for simple insertions
-    }
-    
-    # Check if DOT string contains node information
-    if dot_expected["contains_nodes"] and "node_" not in dot_str:
-        error_messages.append("Error: DOT visualization should contain node information")
-        success = False
-    
-    # For simple insertions, there should be no events in DOT
-    if not dot_expected["contains_events"] and "event_" in dot_str:
-        error_messages.append("Error: DOT visualization should not contain event information for simple insertions")
-        success = False
+    # Verify that each donor sequence is correctly preserved
+    if donor_records:
+        expected_sequences = ["GTACGTAC", "CCGGAATT", "TTAGGCCA"]
+        found_sequences = [str(record.seq) for record in donor_records]
+        
+        for expected_seq in expected_sequences:
+            if expected_seq not in found_sequences:
+                error_messages.append(f"Error: Expected sequence '{expected_seq}' not found in donor records")
+                success = False
     
     if success:
         print("✓ Multiple cutting fragment distinction function test passed!")

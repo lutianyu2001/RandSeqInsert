@@ -448,6 +448,9 @@ class NestingEventJournal:
         # Get all donors that need reconstruction
         reconstructed_uids = self.get_reconstructed_donor_uids(active_nodes)
         
+        # Calculate absolute positions for position-based naming
+        abs_position_map = self._calculate_absolute_positions()
+        
         for uid in reconstructed_uids:
             # Reconstruct sequence
             reconstruct_result = self.reconstruct(uid, seq_id)
@@ -458,60 +461,73 @@ class NestingEventJournal:
             node = self.tree_ref.node_dict.get(uid)
             if not node:
                 continue
-                
-            # Find TSD information for this donor
+            
+            # Find the insertion event for this donor to get its position and TSD info
+            insertion_event = None
             tsd_5 = ""
             tsd_3 = ""
             for event in self.events:
-                if event.donor_uid == uid and event.tsd_info:
-                    tsd_info = event.tsd_info
-                    tsd_5 = tsd_info.get('tsd_5', '')
-                    tsd_3 = tsd_info.get('tsd_3', '')
+                if event.donor_uid == uid:
+                    insertion_event = event
+                    if event.tsd_info:
+                        tsd_info = event.tsd_info
+                        tsd_5 = tsd_info.get('tsd_5', '')
+                        tsd_3 = tsd_info.get('tsd_3', '')
                     break
             
+            if not insertion_event:
+                continue
+                
             # Remove TSD from full reconstruction
             full_seq = reconstruct_result['full']
+            full_donor_length = len(full_seq)
             if tsd_5 and full_seq.startswith(tsd_5):
                 full_seq = full_seq[len(tsd_5):]
+                full_donor_length -= len(tsd_5)
             if tsd_3 and full_seq.endswith(tsd_3):
                 full_seq = full_seq[:-len(tsd_3)]
+                full_donor_length -= len(tsd_3)
             
-            # Create full reconstruction record with TSD removed
-            full_id = f"{seq_id}_reconstructed_{uid}"
-            # Add donor_id to the record ID if it exists
-            if node.donor_id:
-                full_id = f"{full_id}-{node.donor_id}"
+            # Skip if donor has zero length after TSD removal
+            if full_donor_length > 0:
+                # For reconstructed sequences, use UID-based naming with reconstructed prefix
+                # since they may not exactly match final sequence coordinates
+                full_id = f"{seq_id}_reconstructed_{uid}-+-{full_donor_length}"
+                if node.donor_id:
+                    full_id += f"-{node.donor_id}"
+                    
+                full_rec = create_sequence_record(full_seq, full_id)
+                full_rec.annotations["reconstruction_type"] = "full"
+                full_rec.annotations["original_uid"] = uid
+                if node.donor_id:
+                    full_rec.annotations["donor_id"] = node.donor_id
                 
-            full_rec = create_sequence_record(full_seq, full_id)
-            full_rec.annotations["reconstruction_type"] = "full"
-            full_rec.annotations["original_uid"] = uid
-            # Add donor_id to annotations if it exists
-            if node.donor_id:
-                full_rec.annotations["donor_id"] = node.donor_id
+                reconstructed_records.append(full_rec)
             
             # Remove TSD from clean reconstruction
             clean_seq = reconstruct_result['clean']
+            clean_donor_length = len(clean_seq)
             if tsd_5 and clean_seq.startswith(tsd_5):
                 clean_seq = clean_seq[len(tsd_5):]
+                clean_donor_length -= len(tsd_5)
             if tsd_3 and clean_seq.endswith(tsd_3):
                 clean_seq = clean_seq[:-len(tsd_3)]
+                clean_donor_length -= len(tsd_3)
             
-            # Create clean reconstruction record with TSD removed
-            clean_id = f"{seq_id}_clean_reconstructed_{uid}"
-            # Add donor_id to the record ID if it exists
-            if node.donor_id:
-                clean_id = f"{clean_id}-{node.donor_id}"
+            # Skip if donor has zero length after TSD removal
+            if clean_donor_length > 0:
+                # For reconstructed sequences, use UID-based naming with clean_reconstructed prefix
+                clean_id = f"{seq_id}_clean_reconstructed_{uid}-+-{clean_donor_length}"
+                if node.donor_id:
+                    clean_id += f"-{node.donor_id}"
+                    
+                clean_rec = create_sequence_record(clean_seq, clean_id)
+                clean_rec.annotations["reconstruction_type"] = "clean"
+                clean_rec.annotations["original_uid"] = uid
+                if node.donor_id:
+                    clean_rec.annotations["donor_id"] = node.donor_id
                 
-            clean_rec = create_sequence_record(clean_seq, clean_id)
-            clean_rec.annotations["reconstruction_type"] = "clean"
-            clean_rec.annotations["original_uid"] = uid
-            # Add donor_id to annotations if it exists
-            if node.donor_id:
-                clean_rec.annotations["donor_id"] = node.donor_id
-            
-            # Add to result list
-            reconstructed_records.append(full_rec)
-            reconstructed_records.append(clean_rec)
+                reconstructed_records.append(clean_rec)
         
         return reconstructed_records
 
@@ -655,12 +671,8 @@ class NestingEventJournal:
                 node_type = "Node"
                 fill_color = "lightgreen"
             
-            # Create node label
+            # Create node label, never add donor id to the label as it is too long
             label = f"{node_type}\\nUID: {uid}\\nLen: {len(node.data)}"
-            
-            # Add donor_id to label if it exists
-            if node.is_donor and node.donor_id:
-                label = f"{node_type}\\nUID: {uid}\\nLen: {len(node.data)}\\nDonor ID: {node.donor_id}"
             
             # Add node to graph
             dot_str.append(f'  node_{uid} [label="{label}", fillcolor="{fill_color}"];')
