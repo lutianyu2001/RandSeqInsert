@@ -331,8 +331,35 @@ class SequenceTree:
                     path_directions.append('left')
                     current = current.left
                 else:
-                    # Create donor with empty TSD for boundary insertion
-                    donor_node = self._create_node(donor_seq, True, donor_id, donor_node_uid)
+                    # Boundary insertion at left - extract TSD from current node
+                    tsd_5 = tsd_3 = ""
+                    if tsd_length > 0:
+                        # Extract TSD from beginning of current node's full sequence
+                        full_seq = current.get_full_sequence()
+                        tsd_source = full_seq[:tsd_length] if tsd_length <= len(full_seq) else full_seq
+                        tsd_5, tsd_3 = generate_TSD(tsd_source, len(tsd_source))
+                        
+                        # Remove TSD from current node
+                        tsd_5_len = len(current.tsd_5)
+                        if tsd_length <= tsd_5_len:
+                            # TSD entirely from 5' TSD
+                            current.tsd_5 = current.tsd_5[tsd_length:]
+                        elif tsd_length <= tsd_5_len + current.length:
+                            # TSD spans 5' TSD and data
+                            data_trim = tsd_length - tsd_5_len
+                            current.tsd_5 = ""
+                            current.data = current.data[data_trim:]
+                            current.length = len(current.data)
+                        else:
+                            # TSD spans entire node content (rare case)
+                            tsd_3_trim = tsd_length - tsd_5_len - current.length
+                            current.tsd_5 = ""
+                            current.data = ""
+                            current.length = 0
+                            current.tsd_3 = current.tsd_3[tsd_3_trim:] if tsd_3_trim < len(current.tsd_3) else ""
+                    
+                    # Create donor with TSD
+                    donor_node = self._create_node(donor_seq, True, donor_id, donor_node_uid, tsd_5, tsd_3)
                     current.left = donor_node
                     current.update()
                     break
@@ -451,8 +478,42 @@ class SequenceTree:
                     abs_position -= node_end
                     current = current.right
                 else:
-                    # Create donor with empty TSD for boundary insertion
-                    donor_node = self._create_node(donor_seq, True, donor_id, donor_node_uid)
+                    # Boundary insertion at right - extract TSD from current node
+                    tsd_5 = tsd_3 = ""
+                    if tsd_length > 0:
+                        # Extract TSD from end of current node's full sequence
+                        full_seq = current.get_full_sequence()
+                        if tsd_length <= len(full_seq):
+                            tsd_source = full_seq[-tsd_length:]
+                            start_pos = len(full_seq) - tsd_length
+                        else:
+                            tsd_source = full_seq
+                            start_pos = 0
+                        tsd_5, tsd_3 = generate_TSD(tsd_source, len(tsd_source))
+                        
+                        # Remove TSD from current node
+                        tsd_5_len = len(current.tsd_5)
+                        data_len = current.length
+                        
+                        if start_pos >= tsd_5_len + data_len:
+                            # TSD entirely from 3' TSD
+                            trim_pos = start_pos - tsd_5_len - data_len
+                            current.tsd_3 = current.tsd_3[:trim_pos]
+                        elif start_pos >= tsd_5_len:
+                            # TSD spans data and 3' TSD
+                            data_trim_pos = start_pos - tsd_5_len
+                            current.data = current.data[:data_trim_pos]
+                            current.length = len(current.data)
+                            current.tsd_3 = ""
+                        else:
+                            # TSD spans all parts
+                            current.tsd_5 = current.tsd_5[:start_pos]
+                            current.data = ""
+                            current.length = 0
+                            current.tsd_3 = ""
+                    
+                    # Create donor with TSD
+                    donor_node = self._create_node(donor_seq, True, donor_id, donor_node_uid, tsd_5, tsd_3)
                     current.right = donor_node
                     current.update()
                     break
@@ -502,7 +563,35 @@ class SequenceTree:
             if node.left:
                 node.left = self._insert_recursive(node.left, abs_position, donor_seq, donor_id, tsd_length)
             else:
-                donor_node = self._create_node(donor_seq, True, donor_id, donor_node_uid)
+                # Boundary insertion at left - extract TSD from current node
+                tsd_5 = tsd_3 = ""
+                if tsd_length > 0:
+                    # Extract TSD from beginning of current node's full sequence
+                    full_seq = node.get_full_sequence()
+                    tsd_source = full_seq[:tsd_length] if tsd_length <= len(full_seq) else full_seq
+                    tsd_5, tsd_3 = generate_TSD(tsd_source, len(tsd_source))
+                    
+                    # Remove TSD from current node
+                    tsd_5_len = len(node.tsd_5)
+                    if tsd_length <= tsd_5_len:
+                        # TSD entirely from 5' TSD
+                        node.tsd_5 = node.tsd_5[tsd_length:]
+                    elif tsd_length <= tsd_5_len + node.length:
+                        # TSD spans 5' TSD and data
+                        data_trim = tsd_length - tsd_5_len
+                        node.tsd_5 = ""
+                        node.data = node.data[data_trim:]
+                        node.length = len(node.data)
+                    else:
+                        # TSD spans entire node content (rare case)
+                        tsd_3_trim = tsd_length - tsd_5_len - node.length
+                        node.tsd_5 = ""
+                        node.data = ""
+                        node.length = 0
+                        node.tsd_3 = node.tsd_3[tsd_3_trim:] if tsd_3_trim < len(node.tsd_3) else ""
+                
+                # Create donor with TSD
+                donor_node = self._create_node(donor_seq, True, donor_id, donor_node_uid, tsd_5, tsd_3)
                 node.left = donor_node
             node.update()
             return node.balance()
@@ -600,7 +689,42 @@ class SequenceTree:
             if node.right:
                 node.right = self._insert_recursive(node.right, abs_position - node_end, donor_seq, donor_id, tsd_length)
             else:
-                donor_node = self._create_node(donor_seq, True, donor_id, donor_node_uid)
+                # Boundary insertion at right - extract TSD from current node
+                tsd_5 = tsd_3 = ""
+                if tsd_length > 0:
+                    # Extract TSD from end of current node's full sequence
+                    full_seq = node.get_full_sequence()
+                    if tsd_length <= len(full_seq):
+                        tsd_source = full_seq[-tsd_length:]
+                        start_pos = len(full_seq) - tsd_length
+                    else:
+                        tsd_source = full_seq
+                        start_pos = 0
+                    tsd_5, tsd_3 = generate_TSD(tsd_source, len(tsd_source))
+                    
+                    # Remove TSD from current node
+                    tsd_5_len = len(node.tsd_5)
+                    data_len = node.length
+                    
+                    if start_pos >= tsd_5_len + data_len:
+                        # TSD entirely from 3' TSD
+                        trim_pos = start_pos - tsd_5_len - data_len
+                        node.tsd_3 = node.tsd_3[:trim_pos]
+                    elif start_pos >= tsd_5_len:
+                        # TSD spans data and 3' TSD
+                        data_trim_pos = start_pos - tsd_5_len
+                        node.data = node.data[:data_trim_pos]
+                        node.length = len(node.data)
+                        node.tsd_3 = ""
+                    else:
+                        # TSD spans all parts
+                        node.tsd_5 = node.tsd_5[:start_pos]
+                        node.data = ""
+                        node.length = 0
+                        node.tsd_3 = ""
+                
+                # Create donor with TSD
+                donor_node = self._create_node(donor_seq, True, donor_id, donor_node_uid, tsd_5, tsd_3)
                 node.right = donor_node
             node.update()
             return node.balance()

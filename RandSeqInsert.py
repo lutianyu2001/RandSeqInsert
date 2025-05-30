@@ -492,7 +492,7 @@ class SeqGenerator:
                     clean_end = clean_start + clean_length
                     
                     # Get TSD sequence for BED (use 5' TSD, or "NA" if none)
-                    tsd_seq = node.tsd_5 if node.tsd_5 else "NA"
+                    tsd_seq = node.tsd_5 or "NA"
                     
                     # Build name field
                     name_parts = []
